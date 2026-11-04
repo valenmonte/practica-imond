@@ -2,14 +2,60 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>EcoBottle - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoBottle - Data Warehouse Dashboard</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-        h1 { color: #2e7d32; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        header { background-color: #2e7d32; color: white; padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { color: #2e7d32; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background-color: #e8f5e9; color: #2e7d32; }
     </style>
 </head>
 <body>
-    <h1>EcoBottle Data Warehouse</h1>
-    <p>Sitio web en construcción para el proyecto de IMOND.</p>
+    <div class="container">
+        <header>
+            <h1>EcoBottle Data Warehouse</h1>
+            <p>Tablero de control y análisis de ventas - IMOND</p>
+        </header>
+        
+        <div class="card">
+            <h2>Estado del Proyecto</h2>
+            <p>Modelo estrella implementado correctamente mediante tablas de dimensiones y hechos procesadas en DuckDB.</p>
+        </div>
+
+        <div class="card">
+            <h2>Resumen de Consultas Clave</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Indicador / Consulta</th>
+                        <th>Estado</th>
+                        <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Ventas por Categoría</td>
+                        <td><span style="color: green; font-weight: bold;">✔ Configurado</span></td>
+                        <td>Desglose de la facturación total agrupada por categoría de productos.</td>
+                    </tr>
+                    <tr>
+                        <td>Ventas por Provincia</td>
+                        <td><span style="color: green; font-weight: bold;">✔ Configurado</span></td>
+                        <td>Análisis geográfico del comportamiento de los clientes.</td>
+                    </tr>
+                    <tr>
+                        <td>KPIs Generales</td>
+                        <td><span style="color: green; font-weight: bold;">✔ Configurado</span></td>
+                        <td>Métricas de ticket promedio y volumen de transacciones.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 </html>
