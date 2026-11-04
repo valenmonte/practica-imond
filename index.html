@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoBottle AR · Tablero comercial</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#eaf0ed;--card:#fff;--ink:#12261c;--mute:#5d7066;--line:#d5dfda;--a:#0f766e;--b:#e8590c;--up:#15803d;--down:#c2410c;--head:#12332a}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1a15;--card:#15261f;--ink:#e6f0ea;--mute:#8fa59a;--line:#264236;--a:#2dd4bf;--b:#fb923c;--up:#4ade80;--down:#fb923c;--head:#091410}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Trebuchet MS","Segoe UI",system-ui,sans-serif}
+header{background:var(--head);color:#e6f0ea;padding:18px 24px 14px}
+header h1{margin:0;font-size:22px;letter-spacing:.2px}
+header p{margin:2px 0 12px;color:#9fb8ac;font-size:13px}
+.filters{display:flex;flex-wrap:wrap;gap:12px}
+.filters label{display:flex;flex-direction:column;font-size:12px;color:#9fb8ac;gap:3px}
+.filters select,.filters input{background:#1c3d32;color:#fff;border:1px solid #2d5a4a;border-radius:6px;padding:6px 8px;font:inherit;min-width:140px}
+main{max-width:1180px;margin:0 auto;padding:18px 16px 28px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .l{color:var(--mute);font-size:13px}
+.kpi .v{font-size:34px;font-weight:700;margin:2px 0}
+.kpi .d{font-size:13px;font-weight:600}
+.up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--mute)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px}
+.card h2{margin:0 0 8px;font-size:15px}
+.card .sub{margin:-4px 0 8px;color:var(--mute);font-size:12px}
+.chart{position:relative;height:250px}
+.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px}
+.goal .v{font-size:26px;font-weight:700}
+.bar{height:8px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--a)}
+footer{color:var(--mute);font-size:12px;margin-top:18px}
+#err{display:none;margin:18px;padding:14px;border:1px solid var(--down);border-radius:8px;background:var(--card)}
+</style>
+</head>
+<body>
+<header>
+  <h1>EcoBottle AR · Tablero comercial</h1>
+  <p>Ventas online y offline · Classic A y Sport B · datos al 30/09/2025</p>
+  <div class="filters">
+    <label>Desde<input type="date" id="f-from"></label>
+    <label>Hasta<input type="date" id="f-to"></label>
+    <label>Canal<select id="f-ch"></select></label>
+    <label>Provincia<select id="f-pr"></select></label>
+    <label>Producto<select id="f-pd"></select></label>
+  </div>
+</header>
+<div id="err">No se pudo cargar <code>web/data.json</code>. Generalo con <code>python build_dashboard.py</code>. Si abrís el archivo con doble clic, el navegador bloquea la carga: usá <code>python -m http.server</code> y entrá a http://localhost:8000.</div>
+<main>
+  <section class="kpis">
+    <div class="card kpi"><div class="l">Total de ventas</div><div class="v" id="k-ventas">–</div><div class="d" id="d-ventas"></div></div>
+    <div class="card kpi"><div class="l">Usuarios activos</div><div class="v" id="k-users">–</div><div class="d" id="d-users"></div></div>
+    <div class="card kpi"><div class="l">Ticket promedio</div><div class="v" id="k-ticket">–</div><div class="d" id="d-ticket"></div></div>
+    <div class="card kpi"><div class="l">NPS (puntos)</div><div class="v" id="k-nps">–</div><div class="d" id="d-nps"></div></div>
+  </section>
+  <section class="grid">
+    <div class="card"><h2>Ventas por mes</h2><div class="chart"><canvas id="c-ventas"></canvas></div></div>
+    <div class="card"><h2>Usuarios activos por mes</h2><div class="chart"><canvas id="c-users"></canvas></div></div>
+    <div class="card"><h2>NPS por mes</h2><div class="chart"><canvas id="c-nps"></canvas></div></div>
+    <div class="card"><h2>Ventas por provincia</h2><div class="chart"><canvas id="c-prov"></canvas></div></div>
+    <div class="card" style="grid-column:1/-1"><h2>Ranking mensual de ventas por producto</h2><p class="sub">Suma de line_total (sin IVA ni envío)</p><div class="chart"><canvas id="c-rank"></canvas></div></div>
+  </section>
+  <section class="goals">
+    <div class="card goal"><h2>Meta: crecer 15% en Córdoba</h2><p class="sub" id="g-cba-sub"></p><div class="v" id="g-cba"></div><div class="bar"><i id="g-cba-bar"></i></div></div>
+    <div class="card goal"><h2>Meta: bajar tiempos de entrega en Mendoza</h2><p class="sub">Días promedio entre despacho y entrega, por provincia</p><div class="chart" style="height:170px"><canvas id="c-ship"></canvas></div></div>
+  </section>
+  <footer>Fuentes: tablas de hechos y dimensiones del data warehouse (carpeta dw/). Ventas = pedidos PAID y FULFILLED. NPS = %9-10 menos %0-6. Los usuarios activos solo responden al filtro de fechas; el NPS, a fechas y canal. Con un producto elegido, ventas y ticket se calculan sobre sus ítems (sin IVA ni envío).</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = ['#0f766e', '#e8590c', '#6366f1', '#ca8a04'];
+const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const nf = new Intl.NumberFormat('es-AR', {maximumFractionDigits: 1});
+const mLabel = k => MES[+k.slice(5) - 1] + ' ' + k.slice(2, 4);
+const sum = a => a.reduce((s, x) => s + x, 0);
+const charts = {};
+let D, orderMap, provName, prodName;
+
+fetch('web/data.json').then(r => { if (!r.ok) throw 0; return r.json(); }).then(init).catch(() => { $('err').style.display = 'block'; });
+
+function init(data) {
+  D = data;
+  orderMap = new Map(D.orders.map(o => [o[0], o]));
+  provName = Object.fromEntries(D.provinces.map(p => [p.id, p.name])); provName[-1] = 'Sin dato';
+  prodName = Object.fromEntries(D.products.map(p => [p.id, p.name]));
+  const days = D.orders.map(o => o[1]);
+  $('f-from').value = days[0]; $('f-to').value = days[days.length - 1];
+  const fill = (id, label, list) => $(id).innerHTML = `<option value="">${label}</option>` + list.map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+  fill('f-ch', 'Todos', D.channels); fill('f-pr', 'Todas', D.provinces); fill('f-pd', 'Todos', D.products);
+  document.querySelectorAll('.filters input,.filters select').forEach(e => e.addEventListener('change', render));
+  render();
+}
+
+const shift = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const span = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5) + 1;
+const num = id => $(id).value === '' ? null : +$(id).value;
+
+function filters() {
+  let from = $('f-from').value, to = $('f-to').value;
+  if (from > to) [from, to] = [to, from];
+  return {from, to, ch: num('f-ch'), pr: num('f-pr'), pd: num('f-pd')};
+}
+
+// Calcula todos los KPIs para un rango (f.from..f.to) respetando los filtros
+function calc(f) {
+  const ok = (d, ch, pr) => d >= f.from && d <= f.to && (f.ch === null || ch === f.ch) && (f.pr === null || pr === f.pr);
+  const items = D.items.filter(i => ok(i[1], i[2], i[3]) && (f.pd === null || i[4] === f.pd));
+  const orders = D.orders.filter(o => ok(o[1], o[2], o[3]));
+  let ventas, n;
+  if (f.pd === null) { ventas = sum(orders.map(o => o[4])); n = orders.length; }
+  else { ventas = sum(items.map(i => i[5])); n = new Set(items.map(i => i[0])).size; }
+  const ses = D.sessions.filter(s => s[0] >= f.from && s[0] <= f.to);
+  const nps = D.nps.filter(r => r[0] >= f.from && r[0] <= f.to && (f.ch === null || r[1] === f.ch));
+  return {f, items, orders, ses, nps, ventas, n, ticket: n ? ventas / n : 0,
+          users: new Set(ses.map(s => s[1])).size, nps_v: npsOf(nps.map(r => r[2]))};
+}
+function npsOf(scores) {
+  if (!scores.length) return null;
+  const p = scores.filter(s => s >= 9).length, d = scores.filter(s => s <= 6).length;
+  return (p - d) / scores.length * 100;
+}
+
+function delta(id, cur, prev, unit) {
+  const el = $(id);
+  if (cur === null || prev === null || prev === 0 && unit !== 'pts') { el.className = 'd flat'; el.textContent = 'sin período anterior'; return; }
+  const diff = unit === 'pts' ? cur - prev : (cur / prev - 1) * 100;
+  const cls = Math.abs(diff) < 0.05 ? 'flat' : diff > 0 ? 'up' : 'down';
+  el.className = 'd ' + cls;
+  el.textContent = (diff > 0.05 ? '▲ ' : diff < -0.05 ? '▼ ' : '► ') + nf.format(Math.abs(diff)) + (unit === 'pts' ? ' pts' : '%') + ' vs. período anterior';
+}
+
+function byMonth(rows, dayIdx, valFn) {
+  const m = {};
+  rows.forEach(r => { const k = r[dayIdx].slice(0, 7); (m[k] ||= []).push(r); });
+  return Object.keys(m).sort().map(k => [k, valFn(m[k])]);
+}
+
+function draw(id, type, labels, datasets, opts = {}) {
+  charts[id]?.destroy();
+  const css = getComputedStyle(document.documentElement);
+  const grid = css.getPropertyValue('--line'), txt = css.getPropertyValue('--mute');
+  charts[id] = new Chart($(id), {type, data: {labels, datasets}, options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: {legend: {display: datasets.length > 1, labels: {color: txt}}},
+    scales: {x: {ticks: {color: txt}, grid: {display: false}}, y: {ticks: {color: txt, callback: opts.fmt}, grid: {color: grid}, beginAtZero: opts.zero !== false}},
+    ...opts.extra}});
+}
+
+function render() {
+  const f = filters();
+  const cur = calc(f);
+  const len = span(f.from, f.to), pTo = shift(f.from, -1);
+  const prev = calc({...f, from: shift(pTo, -(len - 1)), to: pTo});
+
+  $('k-ventas').textContent = '$' + nf.format(cur.ventas / 1e6) + 'M';
+  $('k-users').textContent = nf.format(cur.users / 1e3) + 'K';
+  $('k-ticket').textContent = '$' + nf.format(cur.ticket / 1e3) + 'K';
+  $('k-nps').textContent = cur.nps_v === null ? '–' : nf.format(cur.nps_v);
+  delta('d-ventas', cur.ventas, prev.ventas); delta('d-users', cur.users, prev.users);
+  delta('d-ticket', cur.ticket, prev.ticket); delta('d-nps', cur.nps_v, prev.nps_v, 'pts');
+
+  // Ventas por mes
+  const vm = f.pd === null ? byMonth(cur.orders, 1, r => sum(r.map(o => o[4]))) : byMonth(cur.items, 1, r => sum(r.map(i => i[5])));
+  draw('c-ventas', 'line', vm.map(x => mLabel(x[0])), [{label: 'Ventas ($M)', data: vm.map(x => x[1] / 1e6), borderColor: COLORS[0], backgroundColor: COLORS[0] + '33', fill: true, tension: .25}], {fmt: v => '$' + v + 'M'});
+
+  // Usuarios activos por mes (distintos dentro de cada mes)
+  const um = byMonth(cur.ses, 0, r => new Set(r.map(s => s[1])).size);
+  draw('c-users', 'line', um.map(x => mLabel(x[0])), [{label: 'Usuarios activos (K)', data: um.map(x => x[1] / 1e3), borderColor: COLORS[2], tension: .25}], {fmt: v => v + 'K'});
+
+  // NPS por mes
+  const nm = byMonth(cur.nps, 0, r => npsOf(r.map(x => x[2])));
+  draw('c-nps', 'line', nm.map(x => mLabel(x[0])), [{label: 'NPS', data: nm.map(x => x[1]), borderColor: COLORS[3], tension: .25}], {zero: false});
+
+  // Ventas por provincia (ignora el filtro de provincia para poder compararlas)
+  const cp = calc({...f, pr: null});
+  const pv = {};
+  if (f.pd === null) cp.orders.forEach(o => pv[o[3]] = (pv[o[3]] || 0) + o[4]);
+  else cp.items.forEach(i => pv[i[3]] = (pv[i[3]] || 0) + i[5]);
+  const pk = Object.keys(pv).sort((a, b) => pv[b] - pv[a]);
+  draw('c-prov', 'bar', pk.map(k => provName[k]), [{label: 'Ventas ($M)', data: pk.map(k => pv[k] / 1e6), backgroundColor: pk.map(k => f.pr === +k ? COLORS[1] : COLORS[0])}], {fmt: v => '$' + v + 'M'});
+
+  // Ranking mensual por producto
+  const months = [...new Set(cur.items.map(i => i[1].slice(0, 7)))].sort();
+  const prods = D.products.filter(p => f.pd === null || p.id === f.pd);
+  draw('c-rank', 'bar', months.map(mLabel), prods.map((p, k) => ({
+    label: p.name, backgroundColor: COLORS[k % 4],
+    data: months.map(m => sum(cur.items.filter(i => i[4] === p.id && i[1].startsWith(m)).map(i => i[5])) / 1e6)})), {fmt: v => '$' + v + 'M'});
+
+  goalCba(f); goalShip(f);
+}
+
+// Meta Córdoba: ventas del último trimestre completo vs. el anterior (ignora filtros de fecha/provincia)
+function goalCba(f) {
+  const cba = D.provinces.find(p => /rdoba/i.test(p.name));
+  if (!cba) return;
+  const last = D.orders[D.orders.length - 1][1];
+  const qEnd = shift(last, 0), qStart = shift(qEnd, -91), pEnd = shift(qStart, -1), pStart = shift(pEnd, -91);
+  const g = {ch: f.ch, pr: cba.id, pd: null};
+  const a = calc({...g, from: qStart, to: qEnd}).ventas, b = calc({...g, from: pStart, to: pEnd}).ventas;
+  const growth = b ? (a / b - 1) * 100 : 0;
+  $('g-cba').textContent = (growth >= 0 ? '+' : '') + nf.format(growth) + '% (objetivo +15%)';
+  $('g-cba').className = 'v ' + (growth >= 15 ? 'up' : 'down');
+  $('g-cba-sub').textContent = `Últimos 92 días (${qStart} a ${qEnd}) vs. los 92 anteriores`;
+  $('g-cba-bar').style.width = Math.max(0, Math.min(100, growth / 15 * 100)) + '%';
+}
+
+function goalShip(f) {
+  const acc = {};
+  D.shipments.forEach(([id, days]) => {
+    const o = orderMap.get(id);
+    if (!o || o[1] < f.from || o[1] > f.to || (f.ch !== null && o[2] !== f.ch)) return;
+    (acc[o[3]] ||= []).push(days);
+  });
+  const ks = Object.keys(acc).sort((a, b) => a - b);
+  const mza = D.provinces.find(p => /mendoza/i.test(p.name));
+  draw('c-ship', 'bar', ks.map(k => provName[k]), [{label: 'Días', data: ks.map(k => sum(acc[k]) / acc[k].length), backgroundColor: ks.map(k => mza && +k === mza.id ? COLORS[1] : COLORS[0])}], {fmt: v => v + ' d'});
+}
+</script>
+</body>
+</html>

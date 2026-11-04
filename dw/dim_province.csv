@@ -1,0 +1,6 @@
+province_key,province_id,province_name,province_code
+1,1,Buenos Aires,BA
+2,2,Córdoba,CBA
+3,3,Santa Fe,SF
+4,4,Mendoza,MZA
+-1,0,Sin dato,
