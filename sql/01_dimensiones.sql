@@ -63,89 +63,107 @@ LEFT JOIN raw.product_category AS f ON f.category_id = c.parent_id;    -- famili
 --   * Si algo puede venir vacío (ej. NPS anónimos, sin cliente), podés agregar
 --     una fila "Desconocido" con clave -1 y usar COALESCE(clave, -1) en los hechos.
 CREATE TABLE dim_date (
-    date_key INT PRIMARY KEY,         
-    full_date DATE NOT NULL,          
-    year INT NOT NULL,                
-    month INT NOT NULL,               
-    month_name VARCHAR NOT NULL,      
-    day INT NOT NULL,                 
-    day_name VARCHAR NOT NULL,        
-    quarter INT NOT NULL,             
-    is_weekend BOOLEAN NOT NULL       
+    date_key   INTEGER PRIMARY KEY,   
+    full_date  DATE NOT NULL,
+    year       INTEGER NOT NULL,
+    month      INTEGER NOT NULL,
+    month_name VARCHAR NOT NULL,
+    day        INTEGER NOT NULL,
+    day_name   VARCHAR NOT NULL,
+    quarter    INTEGER NOT NULL,
+    is_weekend BOOLEAN NOT NULL
 );
 
-
 INSERT INTO dim_date
-SELECT 
-    CAST(strftime(fecha, '%Y%m%d') AS INTEGER) AS date_key,
-    CAST(fecha AS DATE) AS full_date,
-    year(fecha) AS year,
-    month(fecha) AS month,
-    monthname(fecha) AS month_name,
-    day(fecha) AS day,
-    dayname(fecha) AS day_name,
-    quarter(fecha) AS quarter,
-    CASE WHEN dayname(fecha) IN ('Saturday', 'Sunday') THEN TRUE ELSE FALSE END AS is_weekend
-FROM range(DATE '2024-01-01', DATE '2025-10-01', INTERVAL 1 DAY) AS t(fecha);
+SELECT
+    CAST(strftime(fecha, '%Y%m%d') AS INTEGER),
+    fecha,
+    year(fecha),
+    month(fecha),
+    monthname(fecha),
+    day(fecha),
+    dayname(fecha),
+    quarter(fecha),
+    dayname(fecha) IN ('Saturday', 'Sunday')
+FROM (SELECT CAST(range AS DATE) AS fecha
+      FROM range(DATE '2024-01-01', DATE '2025-10-01', INTERVAL 1 DAY));
 
-#--------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------
+-- dim_province
+-- ---------------------------------------------------------------------
+CREATE TABLE dim_province (
+    province_key  INTEGER PRIMARY KEY,
+    province_id   INTEGER NOT NULL,
+    province_name VARCHAR NOT NULL,
+    province_code VARCHAR
+);
+
+INSERT INTO dim_province
+SELECT ROW_NUMBER() OVER (ORDER BY province_id), province_id, name, code
+FROM raw.province;
+
+INSERT INTO dim_province VALUES (-1, 0, 'Sin dato', NULL);
+
+-- ---------------------------------------------------------------------
 
 CREATE TABLE dim_customer (
     customer_key INTEGER PRIMARY KEY,
-    customer_id INTEGER NOT NULL,    
-    full_name VARCHAR NOT NULL,
-    email VARCHAR,
-    city VARCHAR,
-    province VARCHAR,                 
-    country VARCHAR
+    customer_id  INTEGER NOT NULL,
+    full_name    VARCHAR NOT NULL,
+    email        VARCHAR,
+    status       CHAR(1),          
+    created_at   TIMESTAMP
 );
 
 INSERT INTO dim_customer
-SELECT 
-    ROW_NUMBER() OVER (ORDER BY c.customer_id) AS customer_key,
+SELECT
+    ROW_NUMBER() OVER (ORDER BY c.customer_id),
     c.customer_id,
-    COALESCE(c.first_name || ' ' || c.last_name, 'Desconocido') AS full_name,
+    c.first_name || ' ' || c.last_name,
     c.email,
-    COALESCE(a.city, 'Sin especificar') AS city,
-    COALESCE(pr.name, 'Sin especificar') AS province,
-    COALESCE(a.country_code, 'AR') AS country
-FROM raw.customer c
-LEFT JOIN raw.address a ON c.customer_id = a.address_id 
-LEFT JOIN raw.province pr ON a.province_id = pr.province_id;
+    c.status,
+    c.created_at
+FROM raw.customer AS c;
 
-#--------------------------------------------------------------------------------------------------------------------------------
+INSERT INTO dim_customer VALUES (-1, -1, 'Desconocido', NULL, NULL, NULL);
 
+
+-- ---------------------------------------------------------------------
 CREATE TABLE dim_store (
-    store_key INTEGER PRIMARY KEY,
-    store_id INTEGER NOT NULL,
+    store_key  INTEGER PRIMARY KEY,
+    store_id   INTEGER NOT NULL,
     store_name VARCHAR NOT NULL,
-    city VARCHAR,
-    province VARCHAR,
-    store_type VARCHAR                
+    city       VARCHAR,
+    province   VARCHAR,
+    store_type VARCHAR
 );
 
-CREATE OR REPLACE TABLE dim_store AS
-SELECT 
-    ROW_NUMBER() OVER (ORDER BY s.store_id) AS store_key,
+INSERT INTO dim_store
+SELECT
+    ROW_NUMBER() OVER (ORDER BY s.store_id),
     s.store_id,
-    s.name AS store_name,
-    COALESCE(a.city, 'Sin especificar') AS city,
-    COALESCE(pr.name, 'Sin especificar') AS province,
-    'Fisica' AS store_type
-FROM raw.store s
-LEFT JOIN raw.address a ON s.address_id = a.address_id
-LEFT JOIN raw.province pr ON a.province_id = pr.province_id;
+    s.name,
+    a.city,
+    pr.name,
+    'Física'
+FROM raw.store AS s
+LEFT JOIN raw.address  AS a  ON a.address_id = s.address_id
+LEFT JOIN raw.province AS pr ON pr.province_id = a.province_id;
 
-#--------------------------------------------------------------------------------------------------------------------------------
+INSERT INTO dim_store VALUES (-1, -1, 'Online (sin tienda)', NULL, NULL, 'Online');
 
+
+-- ---------------------------------------------------------------------
 CREATE TABLE dim_channel (
-    channel_key INTEGER PRIMARY KEY,
-    channel_id INTEGER NOT NULL,
+    channel_key  INTEGER PRIMARY KEY,
+    channel_id   INTEGER NOT NULL,
+    channel_code VARCHAR NOT NULL,   
     channel_name VARCHAR NOT NULL
 );
 
 INSERT INTO dim_channel
-SELECT 
+SELECT ROW_NUMBER() OVER (ORDER BY channel_id), channel_id, code, name
+FROM raw.channel;
     ROW_NUMBER() OVER (ORDER BY ch.channel_id) AS channel_key,
     ch.channel_id,
     ch.name AS channel_name
