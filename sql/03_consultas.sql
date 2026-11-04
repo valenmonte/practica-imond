@@ -15,7 +15,6 @@ SELECT product_key, name, category, family, list_price
 FROM dim_product
 ORDER BY product_key;
 
-
 -- TU TURNO: agregá acá tus consultas.
 
 SELECT 'fact_orders' AS tabla, COUNT(*) AS filas FROM fact_orders
