@@ -48,6 +48,7 @@ python -m http.server           # abrir http://localhost:8000
 Otros comandos útiles:
 
 - `python run_sql.py --explorar` abre DuckDB en el navegador con las tablas de `raw/`.
+- `python run_sql.py --ui` arma el DW y abre DuckDB con las tablas del modelo.
 
 El dashboard es una página estática (Chart.js) que lee `web/data.json`, por eso funciona en GitHub Pages sin servidor. Reemplaza a Looker Studio.
 
@@ -253,7 +254,7 @@ ORDER BY d.year DESC, d.month DESC, ranking;
 - Las ventas mensuales se mueven entre $13M y $20M, con un pico cercano a $28M en enero de 2025.
 - El NPS cayó a casi 5 puntos hacia septiembre de 2024 y se recuperó desde noviembre de ese año.
 - Los envíos a Buenos Aires tardan unos 2,8 días, contra 4,5 a 4,8 días en Córdoba, Santa Fe y Mendoza. Mendoza, que tiene meta de reducción, no se diferencia de las otras provincias del interior.
-- **Meta Córdoba:** las ventas de los últimos 92 días crecieron -6,0% frente a los 92 anteriores, así que la meta de +15% no alcanzó.
+- **Meta Córdoba:** las ventas de los últimos 92 días cayeron 6,0% frente a los 92 anteriores, así que la meta de +15% no se alcanzó.
 - **Idea nueva:** agregar al tablero las sesiones por origen del tráfico (ads, direct, referral) para medir qué campañas traen más usuarios activos.
 
 ## 10. Convenciones del repositorio
