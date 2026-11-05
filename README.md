@@ -1,206 +1,263 @@
-# Práctica — Introducción al Marketing Online y los Negocios Digitales
+# EcoBottle AR · Mini ecosistema de datos y tablero comercial
 
-Este repositorio tiene los datos de **EcoBottle AR** para la práctica.
+Trabajo práctico de **Introducción al Marketing Online y los Negocios Digitales**.
 
+- **Dashboard publicado:** https://valenmonte.github.io/practica-imond/
 - **Consigna:** [Práctica](https://docs.google.com/document/d/15RNP3FVqLjO4jzh80AAkK6mUR5DOLqPxLjQxqvdzrYg/edit?usp=sharing)
-- **Diagrama de las tablas de origen (DER):** [ver más abajo](#diagrama-de-las-tablas-de-origen-der)
 
-## ¿Qué hay en el repositorio?
+![Dashboard EcoBottle](assets/dashboard.png)
+
+## 1. El caso
+
+EcoBottle AR vende dos botellas reutilizables (Classic A y Sport B) en una tienda online y en 4 tiendas físicas (Buenos Aires, Córdoba, Santa Fe y Mendoza). La gerencia comercial necesita un tablero para el C-level con el crecimiento de ventas por producto, provincia y canal. Las metas del trimestre son **crecer 15% las ventas en Córdoba** y **reducir los tiempos de entrega en Mendoza**.
+
+Los datos de origen (`raw/`) son una foto del sistema al 30/09/2025 con pedidos del 01/01/2024 al 30/09/2025. Los montos están en pesos argentinos.
+
+## 2. Estructura del repositorio
 
 ```
-raw/               los datos de origen: un archivo CSV por tabla (en SQL: raw.<tabla>)
-sql/               acá escribís tus transformaciones en SQL        ← tu trabajo va acá
-run_sql.py         ejecuta tus archivos SQL y arma el data warehouse
-requirements.txt   lo que hay que instalar (DuckDB)
-dw/                el data warehouse: se crea solo al ejecutar run_sql.py
-generator/         el programa que creó los datos de raw/ (no hace falta usarlo)
-assets/            el diagrama de tablas de origen (DER)
+raw/                  datos de origen (13 CSV), no se modifican
+sql/                  transformaciones en SQL (DuckDB)
+  01_dimensiones.sql  dimensiones del modelo estrella
+  02_hechos.sql       tablas de hechos con sus FOREIGN KEY
+  03_consultas.sql    controles del modelo y consultas de los KPI
+dw/                   data warehouse: un CSV por tabla (se genera solo)
+web/data.json         dataset del dashboard (se genera solo)
+index.html            dashboard (GitHub Pages)
+run_sql.py            ejecuta los SQL y arma el data warehouse
+build_dashboard.py    lee dw/ y genera web/data.json
+generator/            programa que creó los datos de raw/ (no se usa)
+requirements.txt      dependencias (DuckDB)
 ```
 
-> ⚠️ **No modifiques los archivos de `raw/`.** Son los datos de origen. Tus consultas SQL los leen y el resultado queda en `dw/`.
+## 3. Cómo ejecutarlo
 
-## Los datos en un minuto
+Requisitos: Python 3.9 o superior y Git.
 
-- Son una **foto del sistema de ventas** de EcoBottle, tomada el **30/09/2025 a las 23:59:59**.
-- Tienen los pedidos del **01/01/2024 al 30/09/2025**.
-- Los montos están en **pesos argentinos**, y los precios de lista **no incluyen IVA**.
-- Las fechas y horas están en **hora de Argentina**.
-- Una **celda vacía** en un CSV significa que ese dato no existe. En SQL aparece como `NULL`.
-
-## Las tablas
-
-| Archivo | Qué guarda | Filas |
-|---|---|---:|
-| `channel.csv` | Los 2 canales de venta: `ONLINE` (web) y `OFFLINE` (tiendas) | 2 |
-| `province.csv` | Las 4 provincias donde opera la empresa | 4 |
-| `product_category.csv` | Categorías de producto: *Bottles* → *Classic* y *Sport* | 3 |
-| `product.csv` | Los 2 productos: Classic A y Sport B | 2 |
-| `store.csv` | Las 4 tiendas físicas | 4 |
-| `customer.csv` | Los clientes | ~3.500 |
-| `address.csv` | Las direcciones de clientes y tiendas | ~3.800 |
-| `sales_order.csv` | Los pedidos: quién compró, cuándo, por qué canal y cuánto pagó | ~12.000 |
-| `sales_order_item.csv` | Los productos de cada pedido (una fila por producto) | ~14.500 |
-| `payment.csv` | El pago de cada pedido | ~12.000 |
-| `shipment.csv` | Los envíos por correo | ~7.000 |
-| `web_session.csv` | Las visitas a la web | ~100.000 |
-| `nps_response.csv` | Las respuestas a la encuesta de satisfacción (NPS) | ~3.000 |
-
-En SQL, cada archivo es una tabla del esquema `raw`: `raw/sales_order.csv` se consulta como `raw.sales_order`.
-
-### Diagrama de las tablas de origen (DER)
-
-Cada caja es una tabla (un CSV de `raw/`) y cada línea une una clave foránea (FK) con la clave primaria (PK) a la que apunta.
-
-![Diagrama entidad-relación de las tablas de origen](./assets/DER.png)
-
-## Cómo leer los datos
-
-### Pedidos
-- **Pedido online:** `store_id` está vacío.
-- **Compra en tienda:** `store_id` indica la tienda, y la "dirección de envío" es la dirección de la tienda (el cliente se lleva el producto en el momento).
-- **Las cuentas siempre cierran:**
-  - `line_total` = cantidad × precio − descuento
-  - `subtotal` = suma de los `line_total` del pedido
-  - `tax_amount` = 21 % del subtotal (IVA)
-  - `total_amount` = subtotal + IVA + costo de envío
-
-### Estados de un pedido (`sales_order.status`)
-
-| Estado | Qué significa | ¿Cuenta como venta? |
-|---|---|:---:|
-| `CREATED` | Se hizo el pedido pero todavía no se pagó | No |
-| `PAID` | Está pagado pero todavía no se entregó | Sí |
-| `FULFILLED` | Ya se entregó (o se compró en la tienda) | Sí |
-| `CANCELLED` | Se canceló: el pago fue rechazado, no se pagó a tiempo o el cliente se arrepintió | No |
-| `REFUNDED` | Se entregó, pero después se devolvió el dinero | No |
-
-### Pagos y envíos
-- Cada pedido tiene **un pago**. Si el pago no se concretó, `paid_at` está vacío.
-- **Solo tienen envío** (`shipment`) los pedidos que viajan por correo: los online y algunos que la tienda manda a domicilio. Las compras en tienda no tienen envío.
-- **Estados del envío:**
-  - `READY`: se está preparando.
-  - `SHIPPED`: está viajando.
-  - `DELIVERED`: se entregó.
-  - `CANCELLED`: no salió.
-
-### Clientes y visitas a la web
-- Un cliente con `status = 'I'` dio de baja su cuenta. Sus compras anteriores siguen en los datos.
-- En `web_session`, un `customer_id` vacío es un visitante que no inició sesión.
-- **Origen de la visita** (`source`):
-  - `ads`: publicidad en redes.
-  - `direct`: entró directo o desde el newsletter.
-  - `referral`: vino de otro sitio o del newsletter.
-  - `organic`: buscadores.
-
-### Encuesta NPS
-- **Cuándo se manda:**
-  - Pedidos entregados por correo: **7 días después de la entrega**.
-  - Compras en tienda: **al día siguiente**.
-- El puntaje va de 0 a 10. Un `customer_id` vacío es una respuesta anónima.
-- La encuesta **no tiene número de pedido**: se relaciona con el cliente (`customer_id`) y con el canal (`channel_id`).
-
-## Para empezar
-
-Vas a escribir las transformaciones en **SQL** usando **DuckDB**, una base de datos que se instala con Python. No necesita servidor ni crear cuentas.
-
-### 1. Preparar tu computadora (una sola vez)
-
-Necesitás tener instalado Python 3.9 o más nuevo y Git. Primero hacé un **fork** de este repositorio en GitHub y después, en la terminal:
-
-```bash
-git clone URL-DE-TU-FORK
-cd NOMBRE-DE-LA-CARPETA
+```
+git clone https://github.com/valenmonte/practica-imond.git
+cd practica-imond
 python -m venv .venv
-```
-
-Activá el entorno virtual:
-
-- **Mac / Linux:** `source .venv/bin/activate`
-- **Windows:** `.venv\Scripts\activate`
-
-Instalá DuckDB:
-
-```bash
+.venv\Scripts\activate          # Windows  (Mac/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
+python run_sql.py               # crea warehouse.duckdb y exporta dw/*.csv
+python build_dashboard.py       # genera web/data.json
+python -m http.server           # abrir http://localhost:8000
 ```
 
-> En Mac, si el comando `python` no existe, usá `python3`. Cada vez que abras una terminal nueva, volvé a activar el entorno.
+Otros comandos útiles:
 
-### 2. Explorar las tablas de origen
+- `python run_sql.py --explorar` abre DuckDB en el navegador con las tablas de `raw/`.
 
-```bash
-python run_sql.py --explorar
+El dashboard es una página estática (Chart.js) que lee `web/data.json`, por eso funciona en GitHub Pages sin servidor. Reemplaza a Looker Studio.
+
+## 4. Modelo dimensional (esquema estrella, Kimball)
+
+### Modelo de origen (raw)
+
+![DER de las tablas de origen](assets/DER.png)
+
+### Esquema estrella
+
+### Modelo de origen (raw)
+
+![DER de las tablas de origen](assets/DER.png)
+
+### Esquema estrella
+
+Todas las dimensiones tienen clave **subrogada** (`*_key`) y conservan la clave **natural** del sistema de origen (`*_id`). Cada dimensión tiene una fila "Desconocido" con clave `-1` para los hechos sin cliente, sin tienda (pedidos online) o sin dirección de envío.
+
+```mermaid
+erDiagram
+    dim_date ||--o{ fact_orders : date_key
+    dim_customer ||--o{ fact_orders : customer_key
+    dim_channel ||--o{ fact_orders : channel_key
+    dim_store ||--o{ fact_orders : store_key
+    dim_province ||--o{ fact_orders : province_key
+    fact_orders ||--o{ fact_sales : order_id
+    dim_product ||--o{ fact_sales : product_key
+    fact_orders ||--o{ fact_shipment : order_id
+    dim_date ||--o{ fact_web_session : date_key
+    dim_customer ||--o{ fact_web_session : customer_key
+    dim_date ||--o{ fact_nps : date_key
+    dim_customer ||--o{ fact_nps : customer_key
+    dim_channel ||--o{ fact_nps : channel_key
 ```
 
-Abre DuckDB en el navegador con las 13 tablas de origen cargadas. Hacé clic en una tabla para ver sus columnas y datos, y escribí consultas para conocerla:
+El diagrama completo, generado automáticamente, está en [`dw/modelo_estrella.md`](dw/modelo_estrella.md).
 
-```sql
-SELECT * FROM raw.sales_order LIMIT 10;
-DESCRIBE raw.sales_order;
-```
+## 5. Diccionario de datos
 
-- **No ejecuta tus archivos de `sql/`**, así que funciona aunque todavía no hayas escrito nada o tengas errores.
-- **Necesita internet.** Sin conexión se abre una consola SQL en la terminal: terminás cada consulta con `;` y salís escribiendo `salir`.
-- **Para cerrar,** volvé a la terminal y presioná Enter.
+### Dimensiones
 
-### 3. Escribir tus transformaciones en SQL
+**dim_date** · una fila por día, del 2024-01-01 al 2025-09-30.
 
-| Archivo | Qué va adentro |
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `date_key` (PK) | INTEGER | Fecha como número, ej. 20240131 |
+| `full_date` | DATE | Fecha |
+| `year`, `month`, `day`, `quarter` | INTEGER | Partes de la fecha |
+| `month_name`, `day_name` | VARCHAR | Nombres (en inglés, como los devuelve DuckDB) |
+| `is_weekend` | BOOLEAN | Verdadero para sábado y domingo |
+
+**dim_product** · una fila por producto, con la jerarquía de categorías aplanada.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `product_key` (PK) | INTEGER | Clave subrogada |
+| `product_id` | INTEGER | Clave natural (`raw.product`) |
+| `sku`, `name` | VARCHAR | SKU y nombre del producto |
+| `category` | VARCHAR | Classic / Sport |
+| `family` | VARCHAR | Bottles (categoría padre) |
+| `list_price` | DECIMAL(12,2) | Precio de lista, sin IVA |
+
+**dim_province** · una fila por provincia, más la fila `-1` "Sin dato".
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `province_key` (PK) | INTEGER | Clave subrogada |
+| `province_id` | INTEGER | Clave natural (0 para "Sin dato") |
+| `province_name`, `province_code` | VARCHAR | Nombre y código |
+
+**dim_customer** · una fila por cliente, más la fila `-1` "Desconocido".
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `customer_key` (PK) | INTEGER | Clave subrogada |
+| `customer_id` | INTEGER | Clave natural |
+| `full_name`, `email` | VARCHAR | Nombre completo y email |
+| `status` | CHAR(1) | `A` activo, `I` dado de baja |
+| `created_at` | TIMESTAMP | Fecha de alta |
+
+**dim_store** · una fila por tienda física, más la fila `-1` "Online (sin tienda)".
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `store_key` (PK) | INTEGER | Clave subrogada |
+| `store_id` | INTEGER | Clave natural |
+| `store_name`, `city`, `province` | VARCHAR | Nombre y ubicación (desde `address`) |
+| `store_type` | VARCHAR | Física / Online |
+
+**dim_channel** · una fila por canal de venta.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `channel_key` (PK) | INTEGER | Clave subrogada |
+| `channel_id` | INTEGER | Clave natural |
+| `channel_code`, `channel_name` | VARCHAR | ONLINE / OFFLINE y su nombre |
+
+### Hechos
+
+**fact_orders** · grano: **un pedido**. Base de Ventas, Ticket Promedio y Ventas por Provincia.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `order_id` (PK) | BIGINT | Número de pedido |
+| `date_key` (FK) | INTEGER | Fecha del pedido → `dim_date` |
+| `customer_key`, `channel_key`, `store_key` (FK) | INTEGER | → dimensiones correspondientes |
+| `province_key` (FK) | INTEGER | Provincia de la dirección de **envío** → `dim_province` |
+| `status` | VARCHAR | CREATED, PAID, CANCELLED, FULFILLED, REFUNDED |
+| `is_sale` | BOOLEAN | Verdadero si el estado es PAID o FULFILLED |
+| `subtotal`, `tax_amount`, `shipping_fee`, `total_amount` | DECIMAL(12,2) | Importes. `total = subtotal + IVA 21% + envío` |
+
+**fact_sales** · grano: **un producto dentro de un pedido**. Base del ranking por producto.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `order_item_id` (PK) | BIGINT | Línea del pedido |
+| `order_id` (FK) | BIGINT | → `fact_orders` |
+| `date_key`, `product_key`, `customer_key`, `channel_key`, `store_key`, `province_key` (FK) | INTEGER | → dimensiones |
+| `is_sale` | BOOLEAN | Heredado del pedido |
+| `quantity` | INTEGER | Cantidad (> 0) |
+| `unit_price`, `discount_amount`, `line_total` | DECIMAL(12,2) | `line_total = cantidad × precio − descuento` |
+
+**fact_web_session** · grano: **una sesión web**. Base de Usuarios Activos.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `session_id` (PK) | BIGINT | Sesión |
+| `date_key` (FK) | INTEGER | Fecha de inicio |
+| `customer_key` (FK) | INTEGER | Cliente, o `-1` si es anónimo |
+| `source` | VARCHAR | Origen del tráfico (ej. ads, direct, referral) |
+| `device` | VARCHAR | Dispositivo |
+| `duration_minutes` | DECIMAL(10,2) | Duración (vacía si no hay `ended_at`) |
+
+**fact_nps** · grano: **una respuesta de encuesta**. Base del NPS.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `nps_id` (PK) | BIGINT | Respuesta |
+| `date_key`, `customer_key`, `channel_key` (FK) | INTEGER | → dimensiones (cliente `-1` si es anónima) |
+| `score` | SMALLINT | 0 a 10 |
+| `category` | VARCHAR | Promotor (9-10), Pasivo (7-8), Detractor (0-6) |
+
+**fact_shipment** · grano: **un envío**. Base de los tiempos de entrega.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `shipment_id` (PK) | BIGINT | Envío |
+| `order_id` (FK) | BIGINT | → `fact_orders` |
+| `date_key`, `province_key`, `channel_key` (FK) | INTEGER | Fecha del pedido, provincia de envío y canal |
+| `carrier`, `status` | VARCHAR | Correo y estado (READY, SHIPPED, DELIVERED, CANCELLED) |
+| `shipped_at`, `delivered_at` | TIMESTAMP | Despacho y entrega |
+| `delivery_days` | DECIMAL(10,2) | Días entre despacho y entrega (solo envíos entregados) |
+
+## 6. Definición de los KPI
+
+| KPI | Cálculo |
 |---|---|
-| `sql/01_dimensiones.sql` | Las tablas de dimensiones. Tiene un **ejemplo resuelto** (`dim_product`) para que veas cómo se hace. |
-| `sql/02_hechos.sql` | Las tablas de hechos, con sus `FOREIGN KEY` hacia las dimensiones. |
-| `sql/03_consultas.sql` | Consultas para revisar el modelo y calcular los KPIs. |
+| Total de ventas | `SUM(total_amount)` de `fact_orders` con `is_sale` (PAID o FULFILLED) |
+| Usuarios activos | usuarios distintos en `fact_web_session` (el cliente, o la sesión si es anónima) |
+| Ticket promedio | `SUM(total_amount) / COUNT(*)` de los pedidos que cuentan como venta |
+| NPS | `(%9-10 − %0-6) × 100` sobre `fact_nps` |
+| Ventas por provincia | `total_amount` agrupado por la provincia de la dirección de envío |
+| Ranking por producto | `line_total` agrupado por producto y mes |
+| Meta Córdoba | ventas de los últimos 92 días vs. los 92 anteriores (objetivo +15%) |
+| Tiempo de entrega | promedio de `delivery_days` por provincia |
 
-Cuando una consulta te funciona mientras explorás, pasala al archivo que corresponde. Podés agregar más archivos: se ejecutan en orden alfabético (`01_...`, `02_...`, `03_...`).
+## 7. Supuestos
 
-### 4. Armar el data warehouse
+- Una **venta** es un pedido en estado `PAID` o `FULFILLED`. Los `CREATED`, `CANCELLED` y `REFUNDED` no cuentan.
+- La **provincia** de una venta es la de la dirección de envío. En las compras en tienda es la de la tienda. Los pedidos sin dirección quedan en "Sin dato".
+- `total_amount` incluye IVA y envío. El ranking por producto usa `line_total`, que no los incluye.
+- Con un producto seleccionado en el dashboard, ventas y ticket se calculan sobre sus ítems (sin IVA ni envío).
+- Los **usuarios activos** solo responden al filtro de fechas, porque `web_session` no tiene canal, provincia ni producto. El **NPS** responde a fechas y canal, porque la encuesta no tiene número de pedido.
+- El **tiempo de entrega** se mide entre `shipped_at` y `delivered_at`, solo para envíos entregados.
+- `raw.customer` no tiene dirección: la provincia no se guarda en `dim_customer` y se toma siempre del pedido.
+- El período de datos es del 01/01/2024 al 30/09/2025. Para comparar contra el período anterior, el dashboard usa un rango de igual duración inmediatamente anterior.
 
-```bash
-python run_sql.py
-```
+## 8. Consultas clave
 
-Esto hace cuatro cosas:
-
-1. Crea la base de datos `warehouse.duckdb` desde cero.
-2. Ejecuta tus archivos de `sql/` en orden y muestra en la terminal el resultado de cada `SELECT`.
-3. Guarda cada tabla que creaste como CSV en `dw/`. **Esos CSV son los que después abrís en Power BI.**
-4. Dibuja tu modelo estrella en `dw/modelo_estrella.md`.
-
-Si hay un error, te dice en qué archivo y en qué sentencia está y por qué falló. Lo corregís y volvés a ejecutar. Como todo se arma desde cero cada vez, no hace falta borrar tablas a mano.
-
-> La base `warehouse.duckdb` no se sube a GitHub (está en `.gitignore`): cualquiera la vuelve a crear con `python run_sql.py`.
-
-### 5. Ver tu modelo
-
-- **El diagrama:** abrí `dw/modelo_estrella.md` en GitHub y vas a ver el modelo dibujado, con las claves y las relaciones. Podés copiarlo en tu README. En VS Code se ve con la extensión *Markdown Preview Mermaid Support*.
-- **Tus tablas en el navegador:** `python run_sql.py --ui` arma el data warehouse y después abre DuckDB con tus tablas y las de origen, para revisar resultados y armar gráficos rápidos.
-
-### Mini guía de SQL en DuckDB
+Las consultas completas están en [`sql/03_consultas.sql`](sql/03_consultas.sql). Dos ejemplos:
 
 ```sql
--- Ver las primeras filas de una tabla de origen
-SELECT * FROM raw.sales_order LIMIT 10;
+-- Ventas por provincia de envío
+SELECT pr.province_name, SUM(f.total_amount) AS ventas
+FROM fact_orders f JOIN dim_province pr USING (province_key)
+WHERE f.is_sale
+GROUP BY pr.province_name
+ORDER BY ventas DESC;
 
--- Ver sus columnas y tipos
-DESCRIBE raw.sales_order;
-
--- Agrupar por mes
-SELECT DATE_TRUNC('month', order_date) AS mes, COUNT(*) AS pedidos
-FROM raw.sales_order
-GROUP BY mes
-ORDER BY mes;
+-- Ranking mensual por producto
+SELECT d.year, d.month, p.name AS producto, SUM(s.line_total) AS ventas,
+       RANK() OVER (PARTITION BY d.year, d.month ORDER BY SUM(s.line_total) DESC) AS ranking
+FROM fact_sales s JOIN dim_product p USING (product_key) JOIN dim_date d USING (date_key)
+WHERE s.is_sale
+GROUP BY d.year, d.month, p.name
+ORDER BY d.year DESC, d.month DESC, ranking;
 ```
 
-- **Datos vacíos:** se buscan con `IS NULL`, y `COALESCE(columna, valor)` reemplaza un vacío por un valor.
-- **Más ayuda:** [documentación de SQL de DuckDB](https://duckdb.org/docs/current/sql/introduction.html).
+## 9. Hallazgos
 
-## ¿Y la carpeta `generator/`?
+- En todo el período (ene 2024 a sep 2025) las ventas suman $382,4M, con un ticket promedio de $34,8K y un NPS de 30 puntos.
+- Las ventas mensuales se mueven entre $13M y $20M, con un pico cercano a $28M en enero de 2025.
+- El NPS cayó a casi 5 puntos hacia septiembre de 2024 y se recuperó desde noviembre de ese año.
+- Los envíos a Buenos Aires tardan unos 2,8 días, contra 4,5 a 4,8 días en Córdoba, Santa Fe y Mendoza. Mendoza, que tiene meta de reducción, no se diferencia de las otras provincias del interior.
+- **Meta Córdoba:** las ventas de los últimos 92 días crecieron -6,0% frente a los 92 anteriores, así que la meta de +15% no alcanzó.
+- **Idea nueva:** agregar al tablero las sesiones por origen del tráfico (ads, direct, referral) para medir qué campañas traen más usuarios activos.
 
-Es el programa que **inventó estos datos** simulando el negocio: clientes que se registran, compran, pagan, reciben el envío y responden la encuesta. **No lo necesitás para la práctica.** Si te interesa ver cómo se arma un conjunto de datos de prueba, podés leerlo; el detalle está en [`generator/README.md`](./generator/README.md).
+## 10. Convenciones del repositorio
 
-Si alguna vez querés volver a generar los datos o comprobar que están bien:
-
-```bash
-python generator/generate_raw.py     # vuelve a crear los CSV de raw/ (salen idénticos)
-python generator/validate_raw.py     # revisa que los datos cumplan todas las reglas
-```
+- Entorno virtual (`.venv`) con dependencias en `requirements.txt`.
+- Commits con [Conventional Commits](https://www.conventionalcommits.org/es/): `feat`, `fix`, `docs`, `chore`.
+- Toda la gestión del repositorio se hace desde la consola.
